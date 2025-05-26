@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Flight Path Visualization</title>
+  <script src="https://unpkg.com/three"></script>
+  <script src="https://unpkg.com/globe.gl"></script>
+</head>
+<body>
+  <div id="globeViz"></div>
+  <script>
+    const world = Globe()
+      (document.getElementById('globeViz'))
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+      .arcsData([
+        {
+          startLat: 37.7749,
+          startLng: -122.4194,
+          endLat: 40.7128,
+          endLng: -74.0060,
+          color: ['#ff0000']
+        }
+      ])
+      .arcAltitude(0.2)
+      .arcStroke(2)
+      .arcDashLength(0.4)
+      .arcDashGap(4)
+      .arcDashInitialGap(() => Math.random() * 5)
+      .arcDashAnimateTime(1000);
+  </script>
+</body>
+</html>

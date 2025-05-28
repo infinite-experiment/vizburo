@@ -1,9 +1,10 @@
 FROM nginx:alpine
 
-WORKDIR /usr/share/nginx/html
+# remove default config if you have custom one
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-COPY . .
+# copy your built site (html, css, js, assets)
+COPY . /usr/share/nginx/html
 
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

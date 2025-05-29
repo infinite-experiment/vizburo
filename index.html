@@ -37,7 +37,7 @@
     console.log(flightId)
     let response;
     try {
-      response = await fetch(`http://localhost:8080/public/flight?i=${flightId}`);
+      response = await fetch(`/public/flight?i=${flightId}`);
     } catch (err) {
       infoPane.innerHTML = "<p class='text-red-500'>Failed to fetch data.</p>";
       throw err;

@@ -1,32 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Flight Path Visualization</title>
-  <script src="https://unpkg.com/three"></script>
-  <script src="https://unpkg.com/globe.gl"></script>
+  <meta charset="UTF-8"/>
+  <title>Flight Map + Info Pane</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "gleo/": "https://unpkg.com/gleo/src/"
+    }
+  }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <div id="globeViz"></div>
-  <script>
-    const world = Globe()
-      (document.getElementById('globeViz'))
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-      .arcsData([
-        {
-          startLat: 37.7749,
-          startLng: -122.4194,
-          endLat: 40.7128,
-          endLng: -74.0060,
-          color: ['#ff0000']
-        }
-      ])
-      .arcAltitude(0.2)
-      .arcStroke(2)
-      .arcDashLength(0.4)
-      .arcDashGap(4)
-      .arcDashInitialGap(() => Math.random() * 5)
-      .arcDashAnimateTime(1000);
+<body class="antialiased">
+  <div class="grid grid-cols-4 h-screen">
+    <div id="gleomap" class="col-span-3"></div>
+    <aside id="infoPane" class="col-span-1 bg-gray-800 text-white p-4 overflow-y-auto"></aside>
+  </div>
+
+  <script type="module">
+    import MercatorMap   from "gleo/MercatorMap.mjs";
+    import MercatorTiles from "gleo/loaders/MercatorTiles.mjs";
+    import Chain         from "gleo/symbols/Chain.mjs";
+    import Circle        from "gleo/symbols/Circle.mjs";
+    import TextLabel     from "gleo/symbols/TextLabel.mjs";
+
+    // --- Sample FlightInfo data ---
+    const flight = {
+      meta: {
+        aircraft: "Boeing 777-300ER",
+        livery: "British Airways",
+        maxSpeed: 915,
+        violations: 0,
+        landings: 1,
+        durationSeconds: 23400,
+        startedAt: "2025-05-30T12:00:00Z"
+      },
+      path: [
+        { lat: "40.6413", long: "-73.7781", timestamp: "2025-05-30T12:00:00Z", alt: 0 },
+        { lat: "45.0",    long: "-50.0",    timestamp: "2025-05-30T13:00:00Z", alt: 9000 },
+        { lat: "51.4700", long: "-0.4543",  timestamp: "2025-05-30T17:30:00Z", alt: 0 }
+      ],
+      origin: {
+        name: "John F. Kennedy Intl",
+        icao: "KJFK",
+        lat: "40.6413",
+        long: "-73.7781"
+      },
+      dest: {
+        name: "London Heathrow",
+        icao: "EGLL",
+        lat: "51.4700",
+        long: "-0.4543"
+      }
+    };
+
+    // --- Initialize the map ---
+    const map = new MercatorMap("gleomap", {
+      center: [parseFloat(flight.origin.lat), parseFloat(flight.origin.long)],
+      span:   5e6,
+      maxSpan: 14e6
+    });
+
+    // --- Add OSM tile layer ---
+    new MercatorTiles("https://tile.osm.org/{z}/{x}/{y}.png", {
+      attribution: "<a href='http://osm.org/copyright'>© OSM contributors</a>"
+    }).addTo(map);
+
+    // --- Draw route (Chain) ---
+    const coords = flight.path.map(p => [parseFloat(p.lat), parseFloat(p.long)]);
+    new Chain(coords, { colour: "#00ff00", width: 2 }).addTo(map);
+
+    // --- Add endpoint markers & labels ---
+    [
+      [flight.origin.lat, flight.origin.long, flight.origin.icao, "red"],
+      [flight.dest.lat, flight.dest.long, flight.dest.icao, "blue"]
+    ].forEach(([lat, lng, code, color]) => {
+      new Circle([parseFloat(lat), parseFloat(lng)], { size: 8, colour: color }).addTo(map);
+      new TextLabel([parseFloat(lat), parseFloat(lng)], { text: code, offset: [10, 0] }).addTo(map);
+    });
+
+    // --- Label all intermediate waypoints (optional) ---
+    flight.path.forEach((wp, i) => {
+      if (i !== 0 && i !== flight.path.length-1) {
+        new Circle([parseFloat(wp.lat), parseFloat(wp.long)], { size: 5, colour: "#aaa" }).addTo(map);
+        new TextLabel([parseFloat(wp.lat), parseFloat(wp.long)], { text: `WP${i}`, offset: [10, 0] }).addTo(map);
+      }
+    });
+
+    // --- Info panel rendering ---
+    function formatDuration(secs) {
+      const h = Math.floor(secs / 3600);
+      const m = Math.round((secs % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
+    function renderInfoPane(f) {
+      document.getElementById('infoPane').innerHTML = `
+        <h2 class="text-xl font-bold mb-4">Flight Details</h2>
+        <div class="space-y-4">
+          <div><h3 class="font-semibold">Aircraft</h3><p>${f.meta.aircraft} (${f.meta.livery})</p></div>
+          <div><h3 class="font-semibold">Origin</h3><p>${f.origin.icao} – ${f.origin.name}</p></div>
+          <div><h3 class="font-semibold">Destination</h3><p>${f.dest.icao} – ${f.dest.name}</p></div>
+          <div><h3 class="font-semibold">Max Speed</h3><p>${f.meta.maxSpeed} kt</p></div>
+          <div><h3 class="font-semibold">Violations</h3><p>${f.meta.violations}</p></div>
+          <div><h3 class="font-semibold">Landings</h3><p>${f.meta.landings}</p></div>
+          <div><h3 class="font-semibold">Duration</h3><p>${formatDuration(f.meta.durationSeconds)}</p></div>
+          <div><h3 class="font-semibold">Started At</h3><p>${f.meta.startedAt.replace('T',' ').replace('Z',' UTC')}</p></div>
+        </div>
+      `;
+    }
+    renderInfoPane(flight);
+
+    // --- Optional: tweak controls
+    const ctrl = map.controls();
+    ctrl.minOmniview = 0.5;
+    ctrl.maxOmniview = 2.0;
   </script>
 </body>
 </html>

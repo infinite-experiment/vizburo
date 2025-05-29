@@ -25,53 +25,53 @@
     import Circle        from "gleo/symbols/Circle.mjs";
     import TextLabel     from "gleo/symbols/TextLabel.mjs";
 
-    // --- Sample FlightInfo data ---
-    const flight = {
-      meta: {
-        aircraft: "Boeing 777-300ER",
-        livery: "British Airways",
-        maxSpeed: 915,
-        violations: 0,
-        landings: 1,
-        durationSeconds: 23400,
-        startedAt: "2025-05-30T12:00:00Z"
-      },
-      path: [
-        { lat: "40.6413", long: "-73.7781", timestamp: "2025-05-30T12:00:00Z", alt: 0 },
-        { lat: "45.0",    long: "-50.0",    timestamp: "2025-05-30T13:00:00Z", alt: 9000 },
-        { lat: "51.4700", long: "-0.4543",  timestamp: "2025-05-30T17:30:00Z", alt: 0 }
-      ],
-      origin: {
-        name: "John F. Kennedy Intl",
-        icao: "KJFK",
-        lat: "40.6413",
-        long: "-73.7781"
-      },
-      dest: {
-        name: "London Heathrow",
-        icao: "EGLL",
-        lat: "51.4700",
-        long: "-0.4543"
-      }
-    };
+    const infoPane = document.getElementById("infoPane");
+    const params = new URLSearchParams(window.location.search);
+    const flightId = params.get("i");
 
-    // --- Initialize the map ---
+    if (!flightId) {
+      infoPane.innerHTML = "<p class='text-red-500'>Missing flight ID in URL.</p>";
+      throw new Error("Flight ID required");
+    }
+
+    console.log(flightId)
+    let response;
+    try {
+      response = await fetch(`http://localhost:8080/public/flight?i=${flightId}`);
+    } catch (err) {
+      infoPane.innerHTML = "<p class='text-red-500'>Failed to fetch data.</p>";
+      throw err;
+    }
+
+    const resJson = await response.json();
+    if (!response.ok || !resJson?.data) {
+      infoPane.innerHTML = "<p class='text-red-500'>Flight not found.</p>";
+      throw new Error("Invalid response");
+    }
+
+    const flight = resJson.data;
+
+    // --- Initialize map ---
+    const centerLat = parseFloat(flight.origin?.lat || flight.path?.[0]?.lat || 0);
+    const centerLng = parseFloat(flight.origin?.long || flight.path?.[0]?.long || 0);
+
     const map = new MercatorMap("gleomap", {
-      center: [parseFloat(flight.origin.lat), parseFloat(flight.origin.long)],
+      center: [centerLat, centerLng],
       span:   5e6,
       maxSpan: 14e6
     });
 
-    // --- Add OSM tile layer ---
     new MercatorTiles("https://tile.osm.org/{z}/{x}/{y}.png", {
       attribution: "<a href='http://osm.org/copyright'>© OSM contributors</a>"
     }).addTo(map);
 
-    // --- Draw route (Chain) ---
-    const coords = flight.path.map(p => [parseFloat(p.lat), parseFloat(p.long)]);
+    // --- Draw route ---
+    const coords = flight.path
+      .filter(p => !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.long)))
+      .map(p => [parseFloat(p.lat), parseFloat(p.long)]);
     new Chain(coords, { colour: "#00ff00", width: 2 }).addTo(map);
 
-    // --- Add endpoint markers & labels ---
+    // --- Endpoints ---
     [
       [flight.origin.lat, flight.origin.long, flight.origin.icao, "red"],
       [flight.dest.lat, flight.dest.long, flight.dest.icao, "blue"]
@@ -80,22 +80,17 @@
       new TextLabel([parseFloat(lat), parseFloat(lng)], { text: code, offset: [10, 0] }).addTo(map);
     });
 
-    // --- Label all intermediate waypoints (optional) ---
-    flight.path.forEach((wp, i) => {
-      if (i !== 0 && i !== flight.path.length-1) {
-        new Circle([parseFloat(wp.lat), parseFloat(wp.long)], { size: 5, colour: "#aaa" }).addTo(map);
-        new TextLabel([parseFloat(wp.lat), parseFloat(wp.long)], { text: `WP${i}`, offset: [10, 0] }).addTo(map);
-      }
-    });
 
-    // --- Info panel rendering ---
+
+    // --- Info panel ---
     function formatDuration(secs) {
       const h = Math.floor(secs / 3600);
       const m = Math.round((secs % 3600) / 60);
       return `${h}h ${m}m`;
     }
+
     function renderInfoPane(f) {
-      document.getElementById('infoPane').innerHTML = `
+      infoPane.innerHTML = `
         <h2 class="text-xl font-bold mb-4">Flight Details</h2>
         <div class="space-y-4">
           <div><h3 class="font-semibold">Aircraft</h3><p>${f.meta.aircraft} (${f.meta.livery})</p></div>
@@ -109,9 +104,9 @@
         </div>
       `;
     }
+
     renderInfoPane(flight);
 
-    // --- Optional: tweak controls
     const ctrl = map.controls();
     ctrl.minOmniview = 0.5;
     ctrl.maxOmniview = 2.0;
